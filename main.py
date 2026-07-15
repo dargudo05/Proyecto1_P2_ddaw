@@ -37,7 +37,7 @@ supabase: Client | None = None
 
 def create_supabase_client(access_token: str | None = None) -> Client:
     if not supabase_url or not supabase_anon_key:
-        raise RuntimeError("Faltan SUPABASE_URL y SUPABASE_ANON_KEY en el archivo .env")
+        raise RuntimeError("Faltan SUPABASE_URL y una clave válida en el archivo .env (SUPABASE_ANON_KEY o SUPABASE_PUBLISHABLE_KEY)")
 
     client = create_client(supabase_url, supabase_anon_key)
     if access_token:
