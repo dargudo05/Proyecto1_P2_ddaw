@@ -16,7 +16,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 
 class AuthRequest(BaseModel):
     email: str
@@ -30,7 +30,11 @@ class AuthResponse(BaseModel):
 security = HTTPBearer(auto_error=False)
 
 supabase_url = os.getenv("SUPABASE_URL")
-supabase_anon_key = os.getenv("SUPABASE_ANON_KEY") or os.getenv("SUPABASE_PUBLISHABLE_KEY")
+supabase_anon_key = (
+    os.getenv("SUPABASE_ANON_KEY")
+    or os.getenv("SUPABASE_PUBLISHABLE_KEY")
+    or os.getenv("SUPABASE_KEY")
+)
 supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SECRET_KEY")
 supabase: Client | None = None
 
