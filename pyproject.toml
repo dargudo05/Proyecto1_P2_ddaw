@@ -1,0 +1,10 @@
+[tool.fastapi]
+entrypoint = "main:app"
+
+[project]
+dependencies = [
+	"fastapi[standard]==0.139.0",
+	"pydantic==2.13.4",
+	"python-dotenv==1.2.2",
+	"supabase==2.31.0"
+]
