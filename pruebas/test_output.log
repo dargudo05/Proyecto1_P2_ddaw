@@ -1,0 +1,137 @@
+Starting FastAPI server with Uvicorn...
+
+==================================================
+VERIFICATION AND VALIDATION TESTS: EMPLEADO RESOURCE
+==================================================
+
+--- TEST 1: List all employees (GET /empleados/) ---
+Status Code: 200
+Response JSON:
+[
+  {
+    "id": null,
+    "cedula": "1723456789",
+    "nombres": "Juan PΘrez",
+    "sueldo_basico": 800.0,
+    "aporte_iess": 0.0945,
+    "bonificaciones": 50.0,
+    "cuenta_bancaria": "1234567890",
+    "prestamos": 100.0,
+    "decimos": true,
+    "fondos_reserva": true
+  },
+  {
+    "id": null,
+    "cedula": "0912345678",
+    "nombres": "Marφa L≤pez",
+    "sueldo_basico": 1200.0,
+    "aporte_iess": 0.0945,
+    "bonificaciones": 150.0,
+    "cuenta_bancaria": "0987654321",
+    "prestamos": 0.0,
+    "decimos": false,
+    "fondos_reserva": false
+  }
+]
+--------------------------------------------------
+
+--- TEST 2: Create new employee JSON (POST /empleados/) ---
+Status Code: 200
+Response JSON:
+{
+  "id": null,
+  "cedula": "1723456701",
+  "nombres": "Carlos Mendoza",
+  "sueldo_basico": 950.0,
+  "aporte_iess": 0.0945,
+  "bonificaciones": 75.0,
+  "cuenta_bancaria": "9998887776",
+  "prestamos": 0.0,
+  "decimos": true,
+  "fondos_reserva": true
+}
+--------------------------------------------------
+
+--- TEST 3: Query created employee (GET /empleados/1723456701) ---
+Status Code: 200
+Response JSON:
+{
+  "id": null,
+  "cedula": "1723456701",
+  "nombres": "Carlos Mendoza",
+  "sueldo_basico": 950.0,
+  "aporte_iess": 0.0945,
+  "bonificaciones": 75.0,
+  "cuenta_bancaria": "9998887776",
+  "prestamos": 0.0,
+  "decimos": true,
+  "fondos_reserva": true
+}
+--------------------------------------------------
+
+--- TEST 4: Attempt to create duplicate employee (POST /empleados/) ---
+Status Code: 400 (Expected: 400)
+Response JSON:
+{
+  "detail": "El empleado con cΘdula '1723456701' ya existe."
+}
+--------------------------------------------------
+
+--- TEST 5: Attempt to create employee with negative salary (POST /empleados/) ---
+Status Code: 400 (Expected: 400)
+Response JSON:
+{
+  "detail": "El sueldo bßsico no puede ser negativo"
+}
+--------------------------------------------------
+
+--- TEST 6: Create employee via HTML Form (POST /empleados_form/) ---
+Status Code: 201 (Expected: 201)
+Response Text:
+Empleado 'Ana Marφa Silva' creado exitosamente en memoria.
+--------------------------------------------------
+
+--- TEST 7: Attempt to create employee via Form with salary < SBU (POST /empleados_form/) ---
+Status Code: 400 (Expected: 400)
+Response JSON:
+{
+  "detail": "El sueldo no puede ser menor al Salario Bßsico Unificado ($460)."
+}
+--------------------------------------------------
+
+--- TEST 8: Update employee (PUT /empleados/1723456701) ---
+Status Code: 200
+Response JSON:
+{
+  "id": null,
+  "cedula": "1723456701",
+  "nombres": "Carlos Mendoza Alaba",
+  "sueldo_basico": 1050.0,
+  "aporte_iess": 0.0945,
+  "bonificaciones": 100.0,
+  "cuenta_bancaria": "9998887776",
+  "prestamos": 50.0,
+  "decimos": true,
+  "fondos_reserva": true
+}
+--------------------------------------------------
+
+--- TEST 9: Delete employee (DELETE /empleados/1723456701) ---
+Status Code: 200
+Response JSON:
+{
+  "status": "success",
+  "message": "Empleado 1723456701 eliminado de memoria"
+}
+--------------------------------------------------
+
+--- TEST 10: Verify deletion of employee (GET /empleados/1723456701) ---
+Status Code: 404 (Expected: 404)
+Response JSON:
+{
+  "detail": "Empleado no encontrado"
+}
+--------------------------------------------------
+
+Shutting down FastAPI server...
+FastAPI server shut down successfully.
