@@ -67,12 +67,64 @@ El cálculo de nómina aplica de forma automática las siguientes fórmulas lega
 *   `POST /novedades/`: Registra novedades mensuales (anticipos, préstamos IESS, descuentos, reembolsos) para un empleado específico en un período. Valida que el empleado exista previamente.
 
 ### 4.3 Procesamiento de Nómina (RF-3 a RF-10)
-*   `POST /nominas/calcular/{periodo}`: Calcula de forma automática la nómina de todos los empleados para un período (ej: `2026-07`). Aplica las fórmulas legales, aplica los descuentos correspondientes (verificando que no den valores negativos) e inserta/actualiza los registros de nómina. **(RF-3, RF-4, RF-8)**
-*   `GET /nominas/historico/`: Recupera el histórico de nóminas generadas. Permite filtrar por parámetro de consulta `periodo`. **(RF-10)**
-*   `GET /nominas/reporte/{cedula}/{periodo}`: Genera el **Rol de Pagos** individual (reporte) de un empleado para un período específico. **(RF-9)**
-*   `POST /nominas/conciliar-anticipos/{periodo}`: Cruza automáticamente una lista de transacciones bancarias (cuenta bancaria, monto, referencia) contra los anticipos registrados en el período y devuelve el reporte de conciliación. **(RF-5)**
-*   `GET /nominas/archivo-sat/{periodo}`: Genera y descarga un archivo plano (.txt) compatible con el sistema de transferencias bancarias SAT. **(RF-6)**
-*   `POST /nominas/{nomina_id}/registrar-pago`: Actualiza el estado de la nómina a `procesado` o `fallido`. En caso de fallo, registra el error y simula una alerta/notificación en el sistema. **(RF-7)**
+
+*   **`POST /nominas/calcular/{periodo}`** (RF-3, RF-4, RF-8)
+    *   **Descripción**: Calcula de forma automática la nómina de todos los empleados para un período determinado (ej: `2026-07`). Aplica las fórmulas de ley (décimo tercero, décimo cuarto, aporte personal IESS, fondos de reserva) y resta los anticipos y préstamos correspondientes.
+    *   **Validación**: Si el `neto_pagar` de algún empleado resulta menor a $0.00 debido a descuentos excesivos, el endpoint detiene el cálculo y lanza un error `HTTPException 400`.
+    *   **Respuesta**: Devuelve una lista con los registros de la entidad `Nomina` generados o actualizados.
+
+*   **`GET /nominas/historico/`** (RF-10)
+    *   **Descripción**: Recupera el histórico de todas las nóminas generadas.
+    *   **Parámetro de consulta**: `periodo` (opcional). Permite filtrar los registros por un mes/año específico (ej. `?periodo=2026-07`).
+
+*   **`GET /nominas/reporte/{cedula}/{periodo}`** (RF-9)
+    *   **Descripción**: Genera el **Rol de Pagos** individual (reporte) de un empleado para un período específico.
+    *   **Respuesta**:
+        ```json
+        {
+          "empleado": { ... },
+          "nomina": { ... }
+        }
+        ```
+
+*   **`POST /nominas/conciliar-anticipos/{periodo}`** (RF-5)
+    *   **Descripción**: Cruza automáticamente una lista de transacciones bancarias contra los anticipos registrados en el período y devuelve un reporte detallado de conciliación.
+    *   **Payload del Request** (`List[TransaccionBancaria]`):
+        ```json
+        [
+          {
+            "cuenta_bancaria": "1234567890",
+            "monto": 200.0,
+            "referencia": "TRANSF-001"
+          }
+        ]
+        ```
+    *   **Respuesta (Reporte)**:
+        *   `conciliados`: Transacciones que coincidieron en cuenta y monto.
+        *   `inconsistencias`: Errores encontrados (cuenta no asociada, montos dispares o empleados sin anticipo programado).
+        *   `no_conciliados_sistema`: Anticipos registrados en el sistema que no se vieron reflejados en las transacciones bancarias recibidas.
+
+*   **`GET /nominas/archivo-sat/{periodo}`** (RF-6)
+    *   **Descripción**: Genera y descarga un archivo plano (.txt) compatible con el sistema de transferencias bancarias SAT.
+    *   **Formato de salida**: Archivo plano separado por punto y coma (`;`):
+        ```text
+        cuenta_bancaria;monto;cedula;nombres;concepto
+        1234567890;594.63;1723456789;Juan Pérez;PAGO_NOMINA_2026-07
+        ```
+
+*   **`POST /nominas/{nomina_id}/registrar-pago`** (RF-7)
+    *   **Descripción**: Actualiza el estado de la nómina a `procesado` o `fallido`.
+    *   **Payload del Request** (`RegistroPagoRequest`):
+        ```json
+        {
+          "estado": "fallido",
+          "error_mensaje": "Cuenta de destino inactiva"
+        }
+        ```
+    *   **Simulación de Alertas**: En caso de estado `fallido`, registra e imprime en el sistema un mensaje de advertencia simulando una alerta/notificación inmediata a los administradores.
+
+---
+
 
 ---
 
