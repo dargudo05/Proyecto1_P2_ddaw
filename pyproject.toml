@@ -2,6 +2,9 @@
 entrypoint = "main:app"
 
 [project]
+name = "proyecto1-p2-ddaw"
+version = "0.1.0"
+description = "FastAPI application for payroll management system"
 dependencies = [
 	"fastapi[standard]==0.139.0",
 	"pydantic==2.13.4",
