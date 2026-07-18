@@ -16,7 +16,21 @@ app = FastAPI(
     version="1.0.0"
 )
 
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
+def get_supabase_config() -> dict[str, str]:
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    if os.path.exists(env_path):
+        load_dotenv(dotenv_path=env_path, override=False)
+    else:
+        load_dotenv(override=False)
+
+    url = os.getenv("SUPABASE_URL", "").strip()
+    key = (
+        os.getenv("SUPABASE_ANON_KEY", "").strip()
+        or os.getenv("SUPABASE_PUBLISHABLE_KEY", "").strip()
+        or os.getenv("SUPABASE_KEY", "").strip()
+    )
+    return {"url": url, "key": key}
+
 
 class AuthRequest(BaseModel):
     email: str
@@ -29,21 +43,19 @@ class AuthResponse(BaseModel):
 
 security = HTTPBearer(auto_error=False)
 
-supabase_url = os.getenv("SUPABASE_URL")
-supabase_anon_key = (
-    os.getenv("SUPABASE_ANON_KEY")
-    or os.getenv("SUPABASE_PUBLISHABLE_KEY")
-    or os.getenv("SUPABASE_KEY")
-)
+supabase_config = get_supabase_config()
+supabase_url = supabase_config["url"]
+supabase_anon_key = supabase_config["key"]
 supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SECRET_KEY")
 supabase: Client | None = None
 
 
 def create_supabase_client(access_token: str | None = None) -> Client:
-    if not supabase_url or not supabase_anon_key:
+    config = get_supabase_config()
+    if not config["url"] or not config["key"]:
         raise RuntimeError("Faltan SUPABASE_URL y una clave válida en el archivo .env (SUPABASE_ANON_KEY o SUPABASE_PUBLISHABLE_KEY)")
 
-    client = create_client(supabase_url, supabase_anon_key)
+    client = create_client(config["url"], config["key"])
     if access_token:
         client.postgrest.auth(access_token)
     return client
