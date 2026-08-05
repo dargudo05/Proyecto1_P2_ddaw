@@ -679,11 +679,12 @@ def listar_empleados(auth: Annotated[dict, Depends(get_authenticated_user)] = No
         try:
             res = client_to_use.table("empleado").select("*").execute()
             if res.data is not None:
-                print(f"[BACKEND -> SUPABASE SUCCESS] Consulta tabla 'empleado' exitosa | Total registros: {len(res.data)}", flush=True)
-                return res.data
+                active_empleados = [e for e in res.data if not str(e.get("nombres", "")).startswith("[INACTIVO]")]
+                print(f"[BACKEND -> SUPABASE SUCCESS] Consulta 'empleado' exitosa | Activos: {len(active_empleados)} / Total BBDD: {len(res.data)}", flush=True)
+                return active_empleados
         except Exception as exc:
             print(f"[BACKEND -> SUPABASE ERROR] Error al consultar tabla 'empleado': {exc}", flush=True)
-    return fake_empleados_db
+    return [e for e in fake_empleados_db if not str(e.get("nombres", "")).startswith("[INACTIVO]")]
 
 
 @app.get("/empleados/{cedula}", response_model=Empleado)
@@ -802,17 +803,48 @@ def actualizar_empleado(cedula: str, empleado: Empleado, auth: Annotated[dict, D
 
 @app.delete("/empleados/{cedula}")
 def eliminar_empleado(cedula: str, auth: Annotated[dict, Depends(get_authenticated_user)] = None):
-    if auth and auth.get("client"):
+    print(f"[BACKEND API] DELETE /empleados/{cedula} - Procesando desactivación (Soft Delete)...", flush=True)
+    client_to_use = (auth and auth.get("client")) or supabase
+
+    has_history = False
+    if client_to_use:
         try:
-            res = auth["client"].table("empleado").delete().eq("cedula", cedula).execute()
-            if res.data:
-                return {"status": "success", "message": f"Empleado {cedula} eliminado"}
+            res_nom = client_to_use.table("nomina").select("*").eq("empleado_cedula", cedula).execute()
+            res_nov = client_to_use.table("novedad").select("*").eq("empleado_cedula", cedula).execute()
+            if (res_nom.data and len(res_nom.data) > 0) or (res_nov.data and len(res_nov.data) > 0):
+                has_history = True
         except Exception:
             pass
+
+    if client_to_use:
+        try:
+            if has_history:
+                res_emp = client_to_use.table("empleado").select("*").eq("cedula", cedula).execute()
+                if res_emp.data:
+                    current_name = res_emp.data[0].get("nombres", "")
+                    if not current_name.startswith("[INACTIVO]"):
+                        new_name = f"[INACTIVO] {current_name}"
+                        client_to_use.table("empleado").update({"nombres": new_name}).eq("cedula", cedula).execute()
+                    print(f"[BACKEND -> SUPABASE SUCCESS] Empleado {cedula} desactivado suavemente (Soft Delete) para preservar auditoría de nómina.", flush=True)
+                    return {"status": "success", "message": f"Empleado {cedula} desactivado exitosamente. Histórico de nómina preservado."}
+            else:
+                res = client_to_use.table("empleado").delete().eq("cedula", cedula).execute()
+                if res.data:
+                    print(f"[BACKEND -> SUPABASE SUCCESS] Empleado {cedula} eliminado de Supabase", flush=True)
+                    return {"status": "success", "message": f"Empleado {cedula} eliminado exitosamente."}
+        except Exception as exc:
+            print(f"[BACKEND -> SUPABASE ERROR] Error al eliminar: {exc}", flush=True)
+
     for idx, emp in enumerate(fake_empleados_db):
         if emp["cedula"] == cedula:
-            fake_empleados_db.pop(idx)
-            return {"status": "success", "message": f"Empleado {cedula} eliminado"}
+            if has_history:
+                if not emp["nombres"].startswith("[INACTIVO]"):
+                    fake_empleados_db[idx]["nombres"] = f"[INACTIVO] {emp['nombres']}"
+                return {"status": "success", "message": f"Empleado {cedula} desactivado (Soft Delete)."}
+            else:
+                fake_empleados_db.pop(idx)
+                return {"status": "success", "message": f"Empleado {cedula} eliminado."}
+
     raise HTTPException(status_code=404, detail="Empleado no encontrado")
 
 
@@ -1036,6 +1068,26 @@ def obtener_historico_nominas(periodo: str | None = None):
 
 @app.get("/nominas/reporte/{cedula}/{periodo}")
 def obtener_reporte_rol_pagos(cedula: str, periodo: str):
+    nomina = None
+    if supabase:
+        try:
+            res = supabase.table("nomina").select("*").eq("empleado_cedula", cedula).eq("periodo", periodo).execute()
+            if res.data:
+                nomina = res.data[0]
+        except Exception:
+            pass
+    if not nomina:
+        for nom in fake_nominas_db:
+            if nom["empleado_cedula"] == cedula and nom["periodo"] == periodo:
+                nomina = nom
+                break
+
+    if not nomina:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Nómina no encontrada para la cédula '{cedula}' en el período '{periodo}'."
+        )
+
     empleado = None
     if supabase:
         try:
@@ -1051,30 +1103,17 @@ def obtener_reporte_rol_pagos(cedula: str, periodo: str):
                 break
     
     if not empleado:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Empleado con cédula '{cedula}' no encontrado."
-        )
-
-    nomina = None
-    if supabase:
-        try:
-            res = supabase.table("nomina").select("*").eq("empleado_cedula", cedula).eq("periodo", periodo).execute()
-            if res.data:
-                nomina = res.data[0]
-        except Exception:
-            pass
-    if not nomina:
-        for nom in fake_nominas_db:
-            if nom["empleado_cedula"] == cedula and nom["periodo"] == periodo:
-                nomina = nom
-                break
-                
-    if not nomina:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Nómina no encontrada para el empleado '{cedula}' en el período '{periodo}'."
-        )
+        empleado = {
+            "cedula": cedula,
+            "nombres": f"Empleado Inactivo ({cedula})",
+            "sueldo_basico": nomina.get("sueldo_basico", 0.0),
+            "cuenta_bancaria": "HISTORICO_AUDITORIA",
+            "aporte_iess": 0.0945,
+            "bonificaciones": nomina.get("bonificaciones", 0.0),
+            "prestamos": 0.0,
+            "decimos": True,
+            "fondos_reserva": True
+        }
 
     return {
         "empleado": empleado,
