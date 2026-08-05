@@ -26,7 +26,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
+def get_supabase_config() -> dict[str, str]:
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    if os.path.exists(env_path):
+        load_dotenv(dotenv_path=env_path, override=False)
+    else:
+        load_dotenv(override=False)
+
+    url = os.getenv("SUPABASE_URL", "").strip()
+    key = (
+        os.getenv("SUPABASE_ANON_KEY", "").strip()
+        or os.getenv("SUPABASE_PUBLISHABLE_KEY", "").strip()
+        or os.getenv("SUPABASE_KEY", "").strip()
+    )
+    return {"url": url, "key": key}
 
 class AuthRequest(BaseModel):
     email: str
@@ -39,12 +52,9 @@ class AuthResponse(BaseModel):
 
 security = HTTPBearer(auto_error=False)
 
-supabase_url = os.getenv("SUPABASE_URL")
-supabase_anon_key = (
-    os.getenv("SUPABASE_ANON_KEY")
-    or os.getenv("SUPABASE_PUBLISHABLE_KEY")
-    or os.getenv("SUPABASE_KEY")
-)
+supabase_config = get_supabase_config()
+supabase_url = supabase_config["url"]
+supabase_anon_key = supabase_config["key"]
 supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SECRET_KEY")
 supabase: Client | None = None
 
