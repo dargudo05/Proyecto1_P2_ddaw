@@ -99,9 +99,83 @@ if supabase_url and supabase_anon_key:
     except Exception as e:
         print(f"[BACKEND -> SUPABASE ERROR] Error al conectar con Supabase: {e}", flush=True)
 
-fake_empleados_db = []
-fake_novedades_db = []
-fake_nominas_db = []
+fake_empleados_db = [
+    {
+        "id": 1,
+        "cedula": "1723456789",
+        "nombres": "Juan Pérez",
+        "sueldo_basico": 800.0,
+        "aporte_iess": 0.0945,
+        "bonificaciones": 50.0,
+        "cuenta_bancaria": "1234567890",
+        "prestamos": 100.0,
+        "decimos": True,
+        "fondos_reserva": True
+    },
+    {
+        "id": 2,
+        "cedula": "0912345678",
+        "nombres": "María López",
+        "sueldo_basico": 1200.0,
+        "aporte_iess": 0.0945,
+        "bonificaciones": 150.0,
+        "cuenta_bancaria": "0987654321",
+        "prestamos": 0.0,
+        "decimos": False,
+        "fondos_reserva": False
+    }
+]
+
+fake_novedades_db = [
+    {
+        "id": 1,
+        "empleado_cedula": "1723456789",
+        "anticipos": 200.0,
+        "prestamo_iess": 50.0,
+        "descuentos": 20.0,
+        "reembolsos": 15.0,
+        "periodo": "2026-07"
+    }
+]
+
+fake_nominas_db = [
+    {
+        "id": 1,
+        "empleado_cedula": "1723456789",
+        "periodo": "2026-07",
+        "sueldo_basico": 800.0,
+        "bonificaciones": 50.0,
+        "reembolsos": 15.0,
+        "decimo_tercero": 70.83,
+        "decimo_cuarto": 38.33,
+        "fondos_reserva": 70.81,
+        "descuento_iess": 80.33,
+        "descuento_prestamos": 100.0,
+        "descuento_prestamo_iess": 50.0,
+        "descuento_anticipos": 200.0,
+        "otros_descuentos": 20.0,
+        "neto_pagar": 594.64,
+        "estado_pago": "pendiente"
+    },
+    {
+        "id": 2,
+        "empleado_cedula": "0912345678",
+        "periodo": "2026-07",
+        "sueldo_basico": 1200.0,
+        "bonificaciones": 150.0,
+        "reembolsos": 0.0,
+        "decimo_tercero": 0.0,
+        "decimo_cuarto": 0.0,
+        "fondos_reserva": 0.0,
+        "descuento_iess": 127.58,
+        "descuento_prestamos": 0.0,
+        "descuento_prestamo_iess": 0.0,
+        "descuento_anticipos": 0.0,
+        "otros_descuentos": 0.0,
+        "neto_pagar": 1222.42,
+        "estado_pago": "procesado"
+    }
+]
 
 
 # PAGINA PRINCIPAL INTERACTIVA (HTML DASHBOARD)
@@ -678,7 +752,7 @@ def listar_empleados(auth: Annotated[dict, Depends(get_authenticated_user)] = No
     if client_to_use:
         try:
             res = client_to_use.table("empleado").select("*").execute()
-            if res.data is not None:
+            if res.data and len(res.data) > 0:
                 active_empleados = [e for e in res.data if not str(e.get("nombres", "")).startswith("[INACTIVO]")]
                 print(f"[BACKEND -> SUPABASE SUCCESS] Consulta 'empleado' exitosa | Activos: {len(active_empleados)} / Total BBDD: {len(res.data)}", flush=True)
                 return active_empleados
@@ -689,17 +763,18 @@ def listar_empleados(auth: Annotated[dict, Depends(get_authenticated_user)] = No
 
 @app.get("/empleados/{cedula}", response_model=Empleado)
 def obtener_empleado(cedula: str, auth: Annotated[dict, Depends(get_authenticated_user)] = None):
-    if auth and auth.get("client"):
+    client_to_use = (auth and auth.get("client")) or supabase
+    if client_to_use:
         try:
-            res = auth["client"].table("empleado").select("*").eq("cedula", cedula).execute()
-            if res.data:
+            res = client_to_use.table("empleado").select("*").eq("cedula", cedula).execute()
+            if res.data and len(res.data) > 0:
                 return res.data[0]
         except Exception:
             pass
     for emp in fake_empleados_db:
-        if emp["cedula"] == cedula:
+        if str(emp["cedula"]) == str(cedula):
             return emp
-    raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    raise HTTPException(status_code=404, detail=f"Empleado con cédula '{cedula}' no encontrado")
 
 
 @app.post("/empleados/", response_model=Empleado)
@@ -716,12 +791,19 @@ def crear_empleado_json(empleado: Empleado, auth: Annotated[dict, Depends(get_au
     if client_to_use:
         try:
             res = client_to_use.table("empleado").insert(emp_dict).execute()
-            if res.data:
+            if res.data and len(res.data) > 0:
                 print(f"[BACKEND -> SUPABASE SUCCESS] Empleado {empleado.cedula} insertado exitosamente en Supabase", flush=True)
                 return res.data[0]
         except Exception as exc:
             print(f"[BACKEND -> SUPABASE ERROR] Error al insertar en Supabase: {exc}", flush=True)
 
+    for idx, e in enumerate(fake_empleados_db):
+        if str(e["cedula"]) == str(emp_dict["cedula"]):
+            fake_empleados_db[idx] = emp_dict
+            return emp_dict
+
+    new_id = max([e.get("id", 0) or 0 for e in fake_empleados_db], default=0) + 1
+    emp_dict["id"] = new_id
     fake_empleados_db.append(emp_dict)
     return emp_dict
 
@@ -770,7 +852,7 @@ def crear_empleado_formulario(
             print(f"[BACKEND -> SUPABASE ERROR] Fallback form insert: {exc}", flush=True)
 
     for idx, e in enumerate(fake_empleados_db):
-        if e["cedula"] == cedula:
+        if str(e["cedula"]) == str(cedula):
             fake_empleados_db[idx] = emp_dict
             return Response(
                 content=f"Empleado '{nombres}' actualizado exitosamente.",
@@ -787,18 +869,30 @@ def crear_empleado_formulario(
 @app.put("/empleados/{cedula}", response_model=Empleado)
 def actualizar_empleado(cedula: str, empleado: Empleado, auth: Annotated[dict, Depends(get_authenticated_user)] = None):
     emp_dict = empleado.model_dump()
-    if auth and auth.get("client"):
+    if emp_dict.get("id") is None:
+        emp_dict.pop("id", None)
+
+    if empleado.sueldo_basico < 460.0:
+        raise HTTPException(status_code=400, detail="El sueldo básico no puede ser menor al SBU ($460.00)")
+
+    client_to_use = (auth and auth.get("client")) or supabase
+    if client_to_use:
         try:
-            res = auth["client"].table("empleado").update(emp_dict).eq("cedula", cedula).execute()
-            if res.data:
+            res = client_to_use.table("empleado").update(emp_dict).eq("cedula", cedula).execute()
+            if res.data and len(res.data) > 0:
+                print(f"[BACKEND -> SUPABASE SUCCESS] Empleado {cedula} actualizado en Supabase", flush=True)
                 return res.data[0]
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"[BACKEND -> SUPABASE ERROR] Error al actualizar en Supabase: {exc}", flush=True)
+
     for idx, emp in enumerate(fake_empleados_db):
-        if emp["cedula"] == cedula:
+        if str(emp["cedula"]) == str(cedula):
+            if not emp_dict.get("id"):
+                emp_dict["id"] = emp.get("id")
             fake_empleados_db[idx] = emp_dict
             return emp_dict
-    raise HTTPException(status_code=404, detail="Empleado no encontrado")
+
+    raise HTTPException(status_code=404, detail=f"Empleado con cédula '{cedula}' no encontrado")
 
 
 @app.delete("/empleados/{cedula}")
@@ -852,12 +946,12 @@ def eliminar_empleado(cedula: str, auth: Annotated[dict, Depends(get_authenticat
 
 @app.get("/novedades/", response_model=List[Novedad])
 def listar_novedades(auth: Annotated[dict, Depends(get_authenticated_user)] = None):
-    print("[BACKEND API] GET /novedades/ - Consultando base de datos...", flush=True)
+    print("[BACKEND API] GET /novedades/ - Consultando novedades...", flush=True)
     client_to_use = (auth and auth.get("client")) or supabase
     if client_to_use:
         try:
             res = client_to_use.table("novedad").select("*").execute()
-            if res.data is not None:
+            if res.data and len(res.data) > 0:
                 print(f"[BACKEND -> SUPABASE SUCCESS] Consulta tabla 'novedad' exitosa | Total registros: {len(res.data)}", flush=True)
                 return res.data
         except Exception as exc:
@@ -868,16 +962,17 @@ def listar_novedades(auth: Annotated[dict, Depends(get_authenticated_user)] = No
 @app.post("/novedades/", response_model=Novedad)
 def registrar_novedad(novedad: Novedad, auth: Annotated[dict, Depends(get_authenticated_user)] = None):
     empleado_existe = False
-    if auth and auth.get("client"):
+    client_to_use = (auth and auth.get("client")) or supabase
+    if client_to_use:
         try:
-            res = auth["client"].table("empleado").select("*").eq("cedula", novedad.empleado_cedula).execute()
-            if res.data:
+            res = client_to_use.table("empleado").select("*").eq("cedula", novedad.empleado_cedula).execute()
+            if res.data and len(res.data) > 0:
                 empleado_existe = True
         except Exception:
             pass
     if not empleado_existe:
         for emp in fake_empleados_db:
-            if emp["cedula"] == novedad.empleado_cedula:
+            if str(emp["cedula"]) == str(novedad.empleado_cedula):
                 empleado_existe = True
                 break
 
@@ -891,17 +986,16 @@ def registrar_novedad(novedad: Novedad, auth: Annotated[dict, Depends(get_authen
     if nov_dict.get("id") is None:
         nov_dict.pop("id", None)
 
-    client_to_use = (auth and auth.get("client")) or supabase
     if client_to_use:
         try:
             res = client_to_use.table("novedad").insert(nov_dict).execute()
-            if res.data:
+            if res.data and len(res.data) > 0:
                 print(f"[BACKEND -> SUPABASE SUCCESS] Novedad para {novedad.empleado_cedula} insertada exitosamente en Supabase", flush=True)
                 return res.data[0]
         except Exception as exc:
             print(f"[BACKEND -> SUPABASE ERROR] Error al registrar novedad en Supabase: {exc}", flush=True)
 
-    new_id = max([n.get("id", 0) for n in fake_novedades_db], default=0) + 1
+    new_id = max([n.get("id", 0) or 0 for n in fake_novedades_db], default=0) + 1
     nov_dict["id"] = new_id
     fake_novedades_db.append(nov_dict)
     return nov_dict
@@ -926,21 +1020,21 @@ def calcular_nomina(periodo: str):
     if supabase:
         try:
             res = supabase.table("empleado").select("*").execute()
-            empleados = res.data
+            if res.data and len(res.data) > 0:
+                empleados = [e for e in res.data if not str(e.get("nombres", "")).startswith("[INACTIVO]")]
         except Exception as e:
             print(f"Error fetching employees from Supabase: {e}")
-            empleados = fake_empleados_db
     if not empleados:
-        empleados = fake_empleados_db
+        empleados = [e for e in fake_empleados_db if not str(e.get("nombres", "")).startswith("[INACTIVO]")]
 
     novedades = []
     if supabase:
         try:
             res = supabase.table("novedad").select("*").eq("periodo", periodo).execute()
-            novedades = res.data
+            if res.data and len(res.data) > 0:
+                novedades = res.data
         except Exception as e:
             print(f"Error fetching novelties from Supabase: {e}")
-            novedades = [n for n in fake_novedades_db if n.get("periodo") == periodo]
     if not novedades:
         novedades = [n for n in fake_novedades_db if n.get("periodo") == periodo]
 
@@ -1055,7 +1149,7 @@ def obtener_historico_nominas(periodo: str | None = None):
             if periodo:
                 query = query.eq("periodo", periodo)
             res = query.execute()
-            if res.data is not None:
+            if res.data and len(res.data) > 0:
                 print(f"[BACKEND -> SUPABASE SUCCESS] Consulta tabla 'nomina' exitosa | Total registros: {len(res.data)}", flush=True)
                 return res.data
         except Exception as e:
@@ -1072,13 +1166,13 @@ def obtener_reporte_rol_pagos(cedula: str, periodo: str):
     if supabase:
         try:
             res = supabase.table("nomina").select("*").eq("empleado_cedula", cedula).eq("periodo", periodo).execute()
-            if res.data:
+            if res.data and len(res.data) > 0:
                 nomina = res.data[0]
         except Exception:
             pass
     if not nomina:
         for nom in fake_nominas_db:
-            if nom["empleado_cedula"] == cedula and nom["periodo"] == periodo:
+            if str(nom["empleado_cedula"]) == str(cedula) and nom["periodo"] == periodo:
                 nomina = nom
                 break
 
@@ -1092,13 +1186,13 @@ def obtener_reporte_rol_pagos(cedula: str, periodo: str):
     if supabase:
         try:
             res = supabase.table("empleado").select("*").eq("cedula", cedula).execute()
-            if res.data:
+            if res.data and len(res.data) > 0:
                 empleado = res.data[0]
         except Exception:
             pass
     if not empleado:
         for emp in fake_empleados_db:
-            if emp["cedula"] == cedula:
+            if str(emp["cedula"]) == str(cedula):
                 empleado = emp
                 break
     
@@ -1127,13 +1221,23 @@ def conciliar_anticipos(periodo: str, transacciones: List[TransaccionBancaria]):
     if supabase:
         try:
             res = supabase.table("empleado").select("*").execute()
-            empleados = res.data
+            if res.data and len(res.data) > 0:
+                empleados = res.data
         except Exception:
             pass
     if not empleados:
         empleados = fake_empleados_db
 
     novedades = []
+    if supabase:
+        try:
+            res = supabase.table("novedad").select("*").eq("periodo", periodo).execute()
+            if res.data and len(res.data) > 0:
+                novedades = res.data
+        except Exception:
+            pass
+    if not novedades:
+        novedades = [n for n in fake_novedades_db if n.get("periodo") == periodo]
     if supabase:
         try:
             res = supabase.table("novedad").select("*").eq("periodo", periodo).execute()
@@ -1235,21 +1339,22 @@ def descargar_archivo_sat(periodo: str):
     if supabase:
         try:
             res = supabase.table("nomina").select("*").eq("periodo", periodo).execute()
-            nominas = res.data
+            if res.data and len(res.data) > 0:
+                nominas = res.data
         except Exception:
             pass
     if not nominas:
-        nominas = [n for n in fake_nominas_db if n["periodo"] == periodo]
+        nominas = [n for n in fake_nominas_db if str(n.get("periodo")) == str(periodo)]
 
     if not nominas:
-        # If no nominas calculated yet for this period, calculate automatically
         nominas = calcular_nomina(periodo)
 
     empleados = []
     if supabase:
         try:
             res = supabase.table("empleado").select("*").execute()
-            empleados = res.data
+            if res.data and len(res.data) > 0:
+                empleados = res.data
         except Exception:
             pass
     if not empleados:
