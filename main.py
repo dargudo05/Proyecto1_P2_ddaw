@@ -1044,7 +1044,8 @@ def calcular_nomina(periodo: str):
     for emp in empleados:
         cedula = emp["cedula"]
         sueldo_basico = float(emp["sueldo_basico"])
-        aporte_iess_pct = float(emp.get("aporte_iess") if emp.get("aporte_iess") is not None else 0.0945)
+        aporte_iess_raw = float(emp.get("aporte_iess") if emp.get("aporte_iess") is not None else 0.0945)
+        aporte_iess_pct = aporte_iess_raw / 100.0 if aporte_iess_raw > 1.0 else aporte_iess_raw
         bonificaciones = float(emp.get("bonificaciones") if emp.get("bonificaciones") is not None else 0.0)
         prestamos = float(emp.get("prestamos") if emp.get("prestamos") is not None else 0.0)
         decimos_enabled = bool(emp.get("decimos", True))
